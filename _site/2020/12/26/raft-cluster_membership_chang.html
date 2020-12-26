@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>raft cluster membership change | Your awesome title</title>
+<meta name="generator" content="Jekyll v4.2.0" />
+<meta property="og:title" content="raft cluster membership change" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="读论文《In Search of an 》的时候，对这一块感觉描述的不清楚。对于什么时候进入joint consensus，什么时候受Joint consensus 条件的约束（两派协商达成共识）都感觉挺模糊的。现在总结一下自己的思路。" />
+<meta property="og:description" content="读论文《In Search of an 》的时候，对这一块感觉描述的不清楚。对于什么时候进入joint consensus，什么时候受Joint consensus 条件的约束（两派协商达成共识）都感觉挺模糊的。现在总结一下自己的思路。" />
+<link rel="canonical" href="/2020/12/26/raft-cluster_membership_chang.html" />
+<meta property="og:url" content="/2020/12/26/raft-cluster_membership_chang.html" />
+<meta property="og:site_name" content="Your awesome title" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-26T00:00:00+08:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="raft cluster membership change" />
+<script type="application/ld+json">
+{"@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"/2020/12/26/raft-cluster_membership_chang.html"},"url":"/2020/12/26/raft-cluster_membership_chang.html","headline":"raft cluster membership change","description":"读论文《In Search of an 》的时候，对这一块感觉描述的不清楚。对于什么时候进入joint consensus，什么时候受Joint consensus 条件的约束（两派协商达成共识）都感觉挺模糊的。现在总结一下自己的思路。","dateModified":"2020-12-26T00:00:00+08:00","datePublished":"2020-12-26T00:00:00+08:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="/feed.xml" title="Your awesome title" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Your awesome title</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">raft cluster membership change</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2020-12-26T00:00:00+08:00" itemprop="datePublished">Dec 26, 2020
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>读论文《In Search of an 》的时候，对这一块感觉描述的不清楚。对于什么时候进入joint consensus，什么时候受Joint consensus 条件的约束（两派协商达成共识）都感觉挺模糊的。现在总结一下自己的思路。</p>
+
+<h1 id="背景">背景</h1>
+<p>raft集群的成员变量可能会发生变更，由于每个节点都是根据本地的config文件来识别集群中的节点的，所以，对于集群变更我们需要更新config文件；进一步，文件下发的时间节点不一致，我们没有办法保证下发新config操作的原子性（除非 集群暂时下线），所以raft想到了2阶段的方式（2阶段的方式很多）：
+1，joint consensus
+2，new config</p>
+
+<h1 id="步骤">步骤：</h1>
+<p>1，(阶段1：leader创建新的config Cold-&gt;new) leader 节点收到请求要更新config，leader节点会创建Cold-new config log entry，然后把这个log如同其他普通log一样下发给其他节点（如果这是一个扩容的情况， 当然也会下发给新的节点）</p>
+
+<p>2, (阶段2：还没有达到两派的绝大多数)（我认为，此刻就进入了joint consensues 阶段了，而不是等到他提交后才算，所以此时受两派共识规则的限制）那么收到log请求的其他follower 会立刻使用这个新的配置（如：集群新来了2个节点，从3节点变为5节点）。</p>
+
+<p>3, (阶段3：已经达到了两派的绝大多数）当leader收到了来自2个部分（原来的老集群，新集群）的绝大多数ack，表示说自己收到了Cold-&gt;new config了，那么leader 才会提交这条log。此时，我们可以想象在老的集群里，绝大多数人也认识到了集群的变更，所以此时即便发生了分区，也不会在老集群里产生leader。</p>
+
+<p>4, (阶段4：leader创建新的config Cnew）那么此时怎么达到共识呢？我认为:
+对于收到了new的config的节点，则直接使用new的配置来确保共识。
+对于old-&gt;config的节点，则直接使用new的配置来确保共识（而不受两派的约束）
+对于old的节点还是使用old的配置来确保共识。</p>
+
+<p>5，（阶段5：leader 提交new config: Cnew）当绝大多数的节点（不区分两派了）都收到了Cnew, leader 则commit</p>
+
+<h1 id="注意">注意</h1>
+<p>对于joint consensus，我们要注意它的rule
+1，无论是新老配置的节点，都还是会收到Log replication的
+2，所有server都有机会成为leader
+3，共识（选举或者commit log）一定是来自两派的绝大多数投票才可以通过。这里的两派是新，旧config 两派。
+如：
+旧：1，2，3 三个节点
+新：1，2，3，4，5 五个节点
+那么3的要求就是旧里面有至少2个同一，新里面有至少3个同意。</p>
+
+<h1 id="异常情况分析">异常情况分析</h1>
+<p>在上述步骤中的任意阶段都有可能发生分区，或者leader宕机等情况。我们来一一分析</p>
+<h2 id="1异常发生在阶段1和2">1，异常发生在阶段1和2</h2>
+<h3 id="分区异常">分区异常</h3>
+<p>此时，有部分节点收到了Cold-&gt;new 节点，举一个极端的例子
+旧：1，2，3
+新：1，2，3，4，5
+leader：3
+分区1：1，2         (未收到Cold-&gt;new)   ===&gt; 会产生leader
+分区2：3，4，5 （收到了Cold-&gt;new）===&gt; 不会产生leader ，或者说existed leader 无法工作吧（因为需要两派的共识）</p>
+
+<h3 id="leader宕机">leader宕机</h3>
+<p>旧：1，2，3
+新：1，2，3，4，5，6，7 （加入了更多的节点）
+leader：3
+1，2：  (未收到Cold-&gt;new) <br />
+3，4，5，6，7 （收到 Cold-&gt;new）</p>
+
+<p>可以想象，新leader可能会出现在old 集群里（如上栗的1号节点收到了2号节点的投票，则成为leader）；
+而新加入的节点想要成为leader 也不是不可以，如果只是收到了来自己4，5，6，7号节点的投票，虽然看上去是占了整个集群的绝大多数，但是破坏了两派的共识，所以不可以，所以如果4号节点要成为leader，还必须收到来自1,2号节点的任意一票</p>
+
+<h2 id="2异常发生在阶段3">2，异常发生在阶段3</h2>
+<p>阶段3，可以理解为两派里的绝大多数节点已经收到了Cold-&gt;new 的配置。</p>
+
+<h3 id="分区异常-1">分区异常</h3>
+<p>此时，有部分节点收到了Cold-&gt;new 节点，举一个极端的例子
+旧：1，2，3
+新：1，2，3，4，5
+leader：3</p>
+
+<p>分区1：1，2         (1号节点收到Cold-&gt;new)<br />
+ ===&gt; 2号不可能成为leader，因为1号比他更新，1号不可能成为leader，因为他需要至少3票。</p>
+
+<p>分区2：3，4，5 （收到了Cold-&gt;new）
+===&gt; 可以产生leader，因为可以收到至少3票的投票</p>
+
+<h3 id="leader宕机-1">leader宕机</h3>
+
+<p>旧：1，2，3
+新：1，2，3，4，5，6，7 （加入了更多的节点）
+leader：3
+1：  (收到Cold-&gt;new) <br />
+2：  (未收到Cold-&gt;new) <br />
+4，5，6，7：  (收到Cold-&gt;new)</p>
+
+<p>可以想象，leader不能能出现在2号old 配置节点上，因为不会有人投给他。
+只可能出现在old-&gt;new 配置的节点上。并且要获得至少4票的选票。</p>
+
+  </div><a class="u-url" href="/2020/12/26/raft-cluster_membership_chang.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Your awesome title</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Your awesome title</li><li><a class="u-email" href="mailto:your-email@example.com">your-email@example.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/jekyll"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">jekyll</span></a></li><li><a href="https://www.twitter.com/jekyllrb"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">jekyllrb</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
