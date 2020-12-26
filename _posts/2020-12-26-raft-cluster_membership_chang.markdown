@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Blogging Like a Hacker
+title: raft cluster membership change 
 ---
 读论文《In Search of an 》的时候，对这一块感觉描述的不清楚。对于什么时候进入joint consensus，什么时候受Joint consensus 条件的约束（两派协商达成共识）都感觉挺模糊的。现在总结一下自己的思路。
 
